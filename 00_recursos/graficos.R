@@ -1,4 +1,55 @@
+## Crear datos
 
+wildfires_tbl <- readxl::read_xlsx("00_recursos/wildfires_2006_2015.xlsx", sheet = 3)
+wildfires_tbl <- wildfires_tbl %>%
+  select(
+    mun = NOMBRE, code = CODIGOINE, woodland_area = ARBOLADO,
+    treeless_area = NOARBOLADO, total_area = TOTAL, everything()
+  )
+
+## Get data
+esp_mun_sf <- esp_get_munic() %>%
+  filter(!(ine.ccaa.name %in% c("Melilla", "Ceuta"))) %>%
+  mutate(code = as.numeric(LAU_CODE))
+esp_mun_wildfires_sf <- esp_mun_sf %>%
+  left_join(
+    wildfires_tbl,
+    by = join_by(code == code)
+  )
+
+incendios_sf  %>%
+  filter(str_detect(Municipio, "Cotobade"))
+
+
+wildfires_2_tbl <- esp_mun_wildfires_sf %>%
+  filter(str_detect(ine.ccaa.name, "Andaluc"))
+
+asturias_sf <- wildfires_2_tbl %>%
+  select(
+    Municipio = name,
+    Conatos = conatos,
+    Incendios = incendios,
+    Total_incendios = TOTAL_INCENDIOS,
+    Area_quemada_ha = total_area
+  ) %>%
+  mutate(
+    Total_incendios = if_else(
+      is.na(Total_incendios), 0, Total_incendios
+    ),
+    Area_quemada_ha = if_else(
+      is.na(Area_quemada_ha), 0, Area_quemada_ha
+    )
+  )
+
+
+st_write(
+  asturias_sf,
+  "00_datos/incendios_ccaa.gpkg",
+  layer = "andalucia",
+  append = FALSE
+)
+
+######################
 aa <- tibble(
   x = x,
   y = y
@@ -320,6 +371,391 @@ ggplot(data, aes(x, y)) +
     size = 3,
     fill = NA, label.color = NA
   )
+
+
+
+################## BBLOQUE 2 ######################## -----
+
+incendios_sf %>%
+  ggplot(aes(fill = cut_number(Total_incendios, 5))) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_d() +
+  theme_void() +
+  labs(fill = "Total incendios") +
+  theme(plot.title = element_text(hjust = .5))
+
+ran <- incendios_sf %>%
+  mutate(
+    random = rpois(313, 20)
+  ) %>%
+  ggplot(aes(fill = random)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c() +
+  theme_void() +
+  labs(title = "No autocorrelación") +
+  theme(legend.position = "none", plot.title = element_text(hjust = .5))
+
+inc + ran
+
+### Densidad incendios
+incendios_sf %>%
+  ggplot(aes(fill = cut_number(d_incendios, 5))) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_d() +
+  theme_void() +
+  labs(fill = "Incendios / km^2^") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+###
+incendios_sf %>%
+  ggplot() +
+  geom_sf(fill = "transparent", linewidth = 0.1) +
+  geom_sf(
+    data = incendios_sf %>%
+      filter(Municipio == "Bóveda"), fill = "grey20"
+  ) +
+  geom_sf(
+    data = incendios_sf %>%
+      filter(
+        Municipio %in% c("Saviñao, O", "Pobra do Brollón, A",
+                         "Monforte de Lemos", "Paradela", "Incio, O")
+      ),
+    fill = "grey60"
+  ) +
+  theme_void() +
+  labs(fill = "Incendios / km^2^") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+ids <- incendios_sf %>%
+  mutate(
+    nb = sfdep::st_knn(st_geometry(incendios_sf), k = 3),
+    wt = st_weights(nb)
+  ) %>%
+  filter(
+    Municipio == "Bóveda"
+  ) %>%
+  unnest(nb) %>%
+  pull(nb)
+
+##
+incendios_sf %>%
+  ggplot() +
+  geom_sf(fill = "transparent", linewidth = 0.1) +
+  geom_sf(
+    data = incendios_sf %>%
+      filter(Municipio == "Bóveda"), fill = "grey20"
+  ) +
+  geom_sf(
+    data = incendios_sf[ids,],
+    fill = "grey60"
+  ) +
+  geom_sf(
+    data = st_centroid(incendios_sf)
+  ) +
+  theme_void() +
+  labs(fill = "Incendios / km^2^") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+##
+ids <- incendios_sf %>%
+  mutate(
+    nb = st_dist_band(st_geometry(incendios_sf), upper = 30000),
+    wt = st_weights(nb)
+  ) %>%
+  filter(
+    Municipio == "Bóveda"
+  ) %>%
+  unnest(nb) %>%
+  pull(nb)
+
+incendios_sf %>%
+  ggplot() +
+  geom_sf(fill = "transparent", linewidth = 0.1) +
+  geom_sf(
+    data = incendios_sf %>%
+      filter(Municipio == "Bóveda"), fill = "grey20"
+  ) +
+  geom_sf(
+    data = incendios_sf[ids,],
+    fill = "grey60"
+  ) +
+  geom_sf(
+    data = st_centroid(incendios_sf)
+  ) +
+  geom_sf(
+    data = st_buffer(
+      incendios_sf %>%
+        filter(Municipio == "Bóveda") %>%
+        st_centroid(),
+      dist = units::set_units(30, km)
+    ),
+    fill = "transparent",
+    color = "red"
+  ) +
+  theme_void() +
+  labs(fill = "Incendios / km^2^") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+
+incendios_sf %>%
+  st_geometry() %>%
+  st_knn(3) ->aa
+
+plot(aa, st_geometry(incendios_sf))
+
+####
+aa <- st_contiguity(incendios_sf)
+st_weights(aa, allow_zero = TRUE, style = "C")
+st_inverse_distance(aa, incendios_sf %>% st_geometry())
+##
+incendios_adyacencia_sf %>%
+  filter(Municipio == "Bóveda") %>%
+  unnest(c(nb, wt))
+## Autoclrreación positiva
+
+
+g1 <- expand_grid(
+  x = 1:7,
+  y = 1:7
+) %>%
+  mutate(
+    z = rep(c(0, 1), 25) %>% .[-50] %>% as.factor()
+  ) %>%
+  ggplot(
+    aes(x, y, fill = z)
+  ) +
+  geom_tile(color = "gray20") +
+  scale_fill_manual(
+    values = c("snow", "gray20")
+  ) +
+  labs(
+    title = "Autocorrelación negativa"
+  ) +
+  coord_equal() +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = .5, face = "bold")
+  )
+
+
+g2 <- expand_grid(
+  x = 1:7,
+  y = 1:7
+) %>%
+  mutate(
+    z = c(rep(1, 21), rep(0, 28)) %>% as.factor()
+  ) %>%
+  ggplot(
+    aes(x, y, fill = z)
+  ) +
+  geom_tile(color = "gray20") +
+  scale_fill_manual(
+    values = c("snow", "gray20")
+  ) +
+  labs(
+    title = "Autocorrelación positiva"
+  ) +
+  coord_equal() +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = .5, face = "bold")
+  )
+
+set.seed(137)
+g3 <- expand_grid(
+  x = 1:7,
+  y = 1:7
+) %>%
+  mutate(
+    z = sample(c(0, 1), 49, replace = TRUE) %>% as.factor()
+  ) %>%
+  ggplot(
+    aes(x, y, fill = z)
+  ) +
+  geom_tile(color = "gray20") +
+  scale_fill_manual(
+    values = c("snow", "gray20")
+  ) +
+  labs(
+    title = "Ausencia de autocorrelación"
+  ) +
+  coord_equal() +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = .5, face = "bold")
+  )
+
+
+g1 + g3 + g2
+
+
+###
+incendios_sf %>%
+  ggplot(aes(fill = Total_incendios)) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_c() +
+  theme_void() +
+  labs(fill = "Total incendios") +
+incendios_adyacencia_sf %>%
+  ggplot(aes(fill = lag_1)) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_c() +
+  theme_void() +
+  labs(fill = "Total incendios (lag)")
+
+
+###
+incendios_lag_sf <- incendios_sf %>%
+  mutate(
+    nb        = st_contiguity(incendios_sf),
+    nb_2      = st_nb_lag(nb, order = 2),
+    nb_acum_2 = st_nb_lag_cumul(nb, order = 2),
+    across(
+      starts_with("nb"),
+      \(x) st_weights(x, allow_zero = TRUE, style = "W"),
+      .names = "wt_{.col}"
+    ),
+    .before   = 2
+  ) %>%
+  mutate(
+    incendios_lag2 = st_lag(Total_incendios, nb, wt_nb)
+  )
+
+## Visualizar incendios con lag
+incendios_lag_sf %>%
+  ggplot(aes(fill = cut_number(incendios_lag2, 5))) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_d() +
+  theme_void() +
+  labs(fill = "Incendios") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+####
+incendios_sf %>%
+  group_by(Provincia) %>%
+  summarise(Total_incendios = sum(Total_incendios)) %>%
+  ungroup() %>%
+  ggplot(aes(fill = Total_incendios)) +
+  geom_sf(color = "transparent", linewidth = 0) +
+  scale_fill_viridis_c() +
+  theme_void() +
+  labs(fill = "Incendios") +
+  theme(
+    plot.title = element_text(hjust = .5),
+    legend.title = element_markdown()
+  )
+
+
+
+
+
+
+
+
+
+####
+plot_pvalue <- function(alt) {
+  incendios_adyacencia_sf %>%
+    mutate(
+      moran_i = local_moran(
+        x           = d_incendios,
+        nb          = nb,
+        wt          = wt,
+        alternative = alt
+      )
+    ) %>%
+    unnest(moran_i) %>%
+    select(-nb, -wt) %>%
+    # mutate(
+    #   p_folded_sim = 2 * p_folded_sim
+    # ) %>%
+    pivot_longer(
+      cols = starts_with("p_")
+    ) %>%
+    mutate(
+      value = if_else(
+        value < 0.05, "Significant", "Not significant"
+      ) %>% as.factor()
+    ) %>%
+    ggplot() +
+    geom_sf(
+      aes(fill = value)
+    ) +
+    scale_fill_manual(
+      values = c("grey20", "grey80"),
+      name   = NULL
+    ) +
+    facet_wrap(~ name) +
+    labs(
+      title = str_glue("Alternative: {alt}")
+    ) +
+    theme_void() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = .5, face = "bold")
+    )
+}
+
+library(patchwork)
+plot_pvalue("less") / plot_pvalue("two.sided") / plot_pvalue("greater") +
+  theme(legend.position = "bottom")
+
+### Josiah ----
+plot_line_pvalue <- function(alt) {
+  dat <- incendios_adyacencia_sf %>%
+    mutate(
+      moran_i = local_moran(
+        x           = d_incendios,
+        nb          = nb,
+        wt          = wt,
+        alternative = alt
+      )
+    ) %>%
+    unnest(moran_i) %>%
+    mutate(
+      p_folded_sim = 2 * p_folded_sim
+    ) %>%
+    select(-nb, -wt) %>%
+    select(starts_with("p_"))
+
+  dat %>%
+    ggplot(aes(p_ii, p_ii_sim)) +
+    geom_point() +
+    theme_bw() +
+    labs(title = str_glue("Alternative: {alt}")) +
+    dat %>%
+    ggplot(aes(p_ii, p_folded_sim)) +
+    geom_point() +
+    theme_bw() +
+    dat %>%
+    ggplot(aes(p_ii_sim, p_folded_sim)) +
+    geom_point() +
+    theme_bw()
+
+}
+
+plot_line_pvalue("less") / plot_line_pvalue("two.sided") / plot_line_pvalue("greater")
+
+
+
 
 
 

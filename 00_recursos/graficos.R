@@ -754,12 +754,238 @@ plot_line_pvalue <- function(alt) {
 
 plot_line_pvalue("less") / plot_line_pvalue("two.sided") / plot_line_pvalue("greater")
 
+###SECCION 3 -----------------
+
+###
+plot(
+  idw_defecto_stars,
+  main = str_glue("IDW con idp = {sel_idp}"),
+  col  = hcl.colors(n = 200, "Oslo")
+)
+plot(st_geometry(spain_sf), add = TRUE)
 
 
+####
+
+plot_folds <- function(data, sel_fold) {
+
+  ## Data 1
+  d1 <- data %>%
+    mutate(
+      type = if_else(
+        fold == sel_fold, "Datos de prueba", "Datos de entrenamiento"
+      ) %>% as.factor()
+    )
+  ## Plot
+  ggplot() +
+    geom_sf(
+      data = spain_sf
+    ) +
+    geom_sf(
+      data = d1,
+      aes(color = type)
+    ) +
+    scale_color_manual(
+      values = c("#92BFB1", "#A61C3C")
+    ) +
+    theme_void() +
+    labs(
+      title = str_glue("Fold {sel_fold}"),
+      color = NULL
+    ) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = .5, face = "bold"))
+
+}
+
+plot_folds(
+  data = tmax_folds_sf,
+  sel_fold = 1
+) +
+  plot_folds(
+    data = tmax_folds_sf,
+    sel_fold = 2
+  ) +
+  plot_folds(
+    data = tmax_folds_sf,
+    sel_fold = 3
+  ) +
+  plot_folds(
+    data = tmax_folds_sf,
+    sel_fold = 4
+  ) +
+  plot_folds(
+    data = tmax_folds_sf,
+    sel_fold = 5
+  ) +
+  theme(legend.position = "bottom")
+
+##Variograma -----------
+var1 <- variogram(
+  object    = log_cadmium ~ 1,
+  locations = meuse_sf,
+  width = 100
+)
+
+## plot variograma
+var1 %>%
+  ggplot(aes(dist, gamma)) +
+  geom_point(size = 2, color = "red") +
+  theme_bw() +
+  labs(
+    x = "Distancia (m)",
+    y = "Semivarianza"
+  ) +
+  theme(
+    panel.grid = element_blank()
+  )
+
+### nube variograma
+var2 <- variogram(
+  object    = log_cadmium ~ 1,
+  locations = meuse_sf,
+  cloud = TRUE
+)
+
+var2 %>%
+  ggplot(aes(dist, gamma)) +
+  geom_point(size = 2) +
+  theme_bw() +
+  labs(
+    x = "Distancia (m)",
+    y = "Semivarianza",
+    title = "Nube variograma"
+  ) +
+  theme(
+    panel.grid = element_blank()
+  )
+
+## Calculo variograma
+var2 %>%
+  ggplot(aes(dist, gamma)) +
+  geom_point(size = 2, alpha = .1) +
+  geom_point(
+    data = var1,
+    size = 2, fill = "red", shape = 21
+  ) +
+  geom_vline(
+    xintercept = seq(0, 1600, 100),
+    color = "gray20",
+    linetype = 2
+  ) +
+  theme_bw() +
+  labs(
+    x = "Distancia (m)",
+    y = "Semivarianza"
+  ) +
+  theme(
+    panel.grid = element_blank()
+  )
 
 
+## Variograma final
+m1 <- vgm(
+  psill  = 1.9 - 0.5,
+  model  = "Sph",
+  range  = 1100,
+  nugget = 0.5
+)
 
+plot(var1, m1)
 
+v_line <- variogramLine(m1, 1500)
+
+var1 %>%
+  ggplot(aes(dist, gamma)) +
+  geom_point(size = 2) +
+  geom_line(
+    data  = v_line,
+    color = "lightblue4",
+    lwd   = 1.2
+  ) +
+  geom_vline(
+    xintercept = m1$range[2],
+    color = "red",
+    linetype = 2,
+    lwd = 1
+  ) +
+  geom_hline(
+    yintercept = sum(m1$psill),
+    color = "blue",
+    linetype = 2,
+    lwd = 1
+  ) +
+  geom_hline(
+    yintercept = m1$psill[1],
+    color = "blue",
+    linetype = 2,
+    lwd = 1
+  ) +
+  theme_bw() +
+  labs(
+    x = "Distancia (m)",
+    y = "Semivarianza"
+  ) +
+  theme(
+    panel.grid = element_blank()
+  ) +
+  ## Anotaciones
+  annotate(
+    "label",
+    label = str_glue("Rango = {m1$range[2]} m"),
+    x = m1$range[2] + 20,
+    y = 1.2,
+    hjust = .5
+  ) +
+  annotate(
+    "label",
+    label = str_glue("Meseta = {sum(m1$psill)}"),
+    x = 200,
+    y = sum(m1$psill),
+    hjust = .5
+  ) +
+  annotate(
+    "label",
+    label = str_glue("Pepita = {m1$psill[1]}"),
+    x = 300,
+    y = m1$psill[1],
+    hjust = .5
+  ) +
+  annotate(
+    "text",
+    label = "Ausencia de autocorrelación\nespacial",
+    x = 1350,
+    y = 1,
+    hjust = .5
+  ) +
+  annotate(
+    "text",
+    label = "Presencia de autocorrelación\nespacial",
+    x = 800,
+    y = 1,
+    hjust = .5
+  ) +
+  annotate(
+    "segment",
+    x     = -20, xend = -20,
+    y     = m1$psill[1],
+    yend  = sum(m1$psill),
+    arrow = arrow(length = unit(3, "mm"))
+  ) +
+  annotate(
+    "segment",
+    x     = -20, xend = -20,
+    yend  = m1$psill[1],
+    y     = sum(m1$psill),
+    arrow = arrow(length = unit(3, "mm"))
+  ) +
+  annotate(
+    "label",
+    label = str_glue("psill = {m1$psill[2]}"),
+    x = -20,
+    y = 1.4,
+    hjust = .2
+  )
 
 
 

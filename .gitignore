@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+00_datos/outputs/practica_final.gpkg
+00_recursos/graficos.R

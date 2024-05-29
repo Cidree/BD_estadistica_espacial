@@ -1,7 +1,7 @@
 <div align="center">
   
-  ![](https://img.shields.io/badge/Comienzo_-04_Junio-darkgreen)
-  ![](https://img.shields.io/badge/Finalizacion_-30_Junio-blue)
+  ![](https://img.shields.io/badge/Comienzo_-01_Julio-darkgreen)
+  ![](https://img.shields.io/badge/Finalizacion_-31_Julio-blue)
   
 </div>
 
